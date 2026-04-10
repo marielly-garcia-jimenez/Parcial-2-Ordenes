@@ -5,6 +5,7 @@ import com.exam.order_service.repository.OrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
 
 import java.util.List;
 
@@ -20,9 +21,19 @@ public class OrderController {
     }
 
     @PostMapping
-    public Order createOrder(@RequestBody Order order) {
-        log.info("Creando orden para el usuario: {}", order.getUsuarioId());
+    public Order createOrder(@RequestBody Order order, WebRequest request) {
+        log.info("Intentando crear orden para el usuario: {}", order.getUsuarioId());
+        request.setAttribute("failedObject", order, WebRequest.SCOPE_REQUEST);
+        if (order.getUsuarioId() == null || order.getUsuarioId().equals("fail")) {
+            throw new RuntimeException("Error simulado en creación de orden");
+        }
         order.setEstado("PENDIENTE");
+        return orderRepository.save(order);
+    }
+
+    @PostMapping("/retry")
+    public Order createOrderRetry(@RequestBody Order order) {
+        log.info("Reintentando crear orden desde Broker: {}", order.getUsuarioId());
         return orderRepository.save(order);
     }
 
