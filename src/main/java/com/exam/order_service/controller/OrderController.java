@@ -24,16 +24,26 @@ public class OrderController {
     public Order createOrder(@RequestBody Order order, WebRequest request) {
         log.info("Intentando crear orden para el usuario: {}", order.getUsuarioId());
         request.setAttribute("failedObject", order, WebRequest.SCOPE_REQUEST);
-        if (order.getUsuarioId() == null || order.getUsuarioId().equals("fail")) {
-            throw new RuntimeException("Error simulado en creación de orden");
+        
+        // Disparar reintento si es "fail" o "fail_permanent"
+        if (order.getUsuarioId() == null || 
+            order.getUsuarioId().equalsIgnoreCase("fail") || 
+            order.getUsuarioId().equalsIgnoreCase("fail_permanent")) {
+            
+            throw new RuntimeException("Error simulado para iniciar ciclo de reintentos");
         }
+        
         order.setEstado("PENDIENTE");
         return orderRepository.save(order);
     }
 
     @PostMapping("/retry")
-    public Order createOrderRetry(@RequestBody Order order) {
-        log.info("Reintentando crear orden desde Broker: {}", order.getUsuarioId());
+    public Order saveRetry(@RequestBody Order order) {
+        log.info("Reintentando guardar orden desde Broker: {}", order.getId());
+        if (order.getUsuarioId() != null && order.getUsuarioId().equalsIgnoreCase("fail_permanent")) {
+            log.warn("Simulando fallo permanente en Orden para prueba de 5 intentos");
+            throw new RuntimeException("Fallo simulado permanentemente en orden");
+        }
         return orderRepository.save(order);
     }
 
