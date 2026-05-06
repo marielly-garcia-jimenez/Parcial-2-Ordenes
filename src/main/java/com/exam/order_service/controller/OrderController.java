@@ -15,9 +15,11 @@ public class OrderController {
 
     private static final Logger log = LoggerFactory.getLogger(OrderController.class);
     private final OrderRepository orderRepository;
+    private final org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate;
 
-    public OrderController(OrderRepository orderRepository) {
+    public OrderController(OrderRepository orderRepository, org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate) {
         this.orderRepository = orderRepository;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @PostMapping
@@ -34,7 +36,13 @@ public class OrderController {
         }
         
         order.setEstado("PENDIENTE");
-        return orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
+        
+        // Paso 1: ACTUALIZAR INVENTARIO DE PRODUCTOS
+        kafkaTemplate.send("inventory_update_events", savedOrder);
+        log.info("Evento inventory_update_events enviado para orden {}", savedOrder.getId());
+        
+        return savedOrder;
     }
 
     @PostMapping("/retry")
@@ -44,7 +52,12 @@ public class OrderController {
             log.warn("Simulando fallo permanente en Orden para prueba de 5 intentos");
             throw new RuntimeException("Fallo simulado permanentemente en orden");
         }
-        return orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
+        
+        // También disparar inventario en el reintento exitoso
+        kafkaTemplate.send("inventory_update_events", savedOrder);
+        
+        return savedOrder;
     }
 
     @GetMapping("/{id}")
@@ -65,8 +78,31 @@ public class OrderController {
         Order order = orderRepository.findById(id).orElse(null);
         if (order != null) {
             order.setEstado(status);
-            return orderRepository.save(order);
+            Order updatedOrder = orderRepository.save(order);
+            
+            // Paso 1: ACTUALIZAR ESTATUS DE ORDEN
+            kafkaTemplate.send("order_status_changed_events", updatedOrder);
+            log.info("Evento order_status_changed_events enviado para orden {}", updatedOrder.getId());
+            
+            return updatedOrder;
         }
         return null;
+    }
+
+    @PutMapping("/{id}")
+    public Order updateOrder(@PathVariable String id, @RequestBody Order orderUpdate) {
+        log.info("Actualizando orden {}", id);
+        return orderRepository.findById(id).map(existingOrder -> {
+            boolean productsChanged = !existingOrder.getProductoIds().equals(orderUpdate.getProductoIds());
+            existingOrder.setProductoIds(orderUpdate.getProductoIds());
+            existingOrder.setTotal(orderUpdate.getTotal());
+            Order saved = orderRepository.save(existingOrder);
+            
+            if (productsChanged) {
+                // Paso 1.1: ACTUALIZAR INVENTARIO DE PRODUCTOS
+                kafkaTemplate.send("inventory_update_events", saved);
+            }
+            return saved;
+        }).orElse(null);
     }
 }

@@ -20,18 +20,29 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public void handleAllExceptions(Exception ex, WebRequest request) {
+    public org.springframework.http.ResponseEntity<java.util.Map<String, Object>> handleAllExceptions(Exception ex, WebRequest request) {
         log.error("Error detectado en Order Service, enviando a Kafka para reintento: {}", ex.getMessage());
         
         Object body = request.getAttribute("failedObject", WebRequest.SCOPE_REQUEST);
         
-        RetryMessage<Object> retryMessage = new RetryMessage<>(
-                body,
+        // Envolver el body en un mapa con la llave "data" como espera el Broker
+        java.util.Map<String, Object> payloadWrapper = new java.util.HashMap<>();
+        payloadWrapper.put("data", body);
+        
+        RetryMessage<java.util.Map<String, Object>> retryMessage = new RetryMessage<>(
+                payloadWrapper,
                 new RetryMessage.StepStatus("PENDING", "Pendiente de enviar correo"),
                 new RetryMessage.StepStatus("PENDING", "Pendiente de actualizar")
         );
 
         kafkaTemplate.send(TOPIC, retryMessage);
         log.info("Mensaje de reintento enviado al tópico: {}", TOPIC);
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("status", "RETRY_QUEUED");
+        response.put("message", "La orden no pudo procesarse inmediatamente y ha sido enviada al sistema de reintentos.");
+        response.put("error", ex.getMessage());
+        
+        return org.springframework.http.ResponseEntity.ok(response);
     }
 }
