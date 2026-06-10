@@ -34,9 +34,9 @@ public class PaymentReceivedListener {
             
             if (orderId != null) {
                 orderRepository.findById(orderId).ifPresent(order -> {
-                    order.setEstado("PAGADA");
+                    order.setEstado("PAGADO");
                     orderRepository.save(order);
-                    log.info("Orden {} actualizada a estado PAGADA", orderId);
+                    log.info("Orden {} actualizada a estado PAGADO", orderId);
                     
                     // Notificar cambio de estatus
                     kafkaTemplate.send("order_status_changed_events", order);
