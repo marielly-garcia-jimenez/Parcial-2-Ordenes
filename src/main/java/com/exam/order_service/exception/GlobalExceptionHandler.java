@@ -21,10 +21,28 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public org.springframework.http.ResponseEntity<java.util.Map<String, Object>> handleAllExceptions(Exception ex, WebRequest request) {
+        // Ignorar excepciones estándar de Spring MVC que no deben disparar reintentos (como 405 Method Not Supported)
+        if (ex instanceof org.springframework.web.HttpRequestMethodNotSupportedException) {
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("status", "ERROR");
+            response.put("message", "Método HTTP no soportado");
+            response.put("error", ex.getMessage());
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED).body(response);
+        }
+
         log.error("Error detectado en Order Service, enviando a Kafka para reintento: {}", ex.getMessage());
         
         Object body = request.getAttribute("failedObject", WebRequest.SCOPE_REQUEST);
         
+        // Si no hay body de fallo, es un error genérico que no requiere reintento de creación
+        if (body == null) {
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("status", "ERROR");
+            response.put("message", "Error interno en el servidor");
+            response.put("error", ex.getMessage());
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+
         // Envolver el body en un mapa con la llave "data" como espera el Broker
         java.util.Map<String, Object> payloadWrapper = new java.util.HashMap<>();
         payloadWrapper.put("data", body);

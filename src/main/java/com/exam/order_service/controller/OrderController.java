@@ -24,10 +24,11 @@ public class OrderController {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    @GetMapping
+    @GetMapping("")
     public List<Order> findAll() {
-        log.info("Obteniendo todas las ordenes");
-        return orderRepository.findAll();
+        List<Order> all = orderRepository.findAll();
+        log.info("Obteniendo todas las ordenes. Encontradas: {}", all.size());
+        return all;
     }
 
     @PostMapping
